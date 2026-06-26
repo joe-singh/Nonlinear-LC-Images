@@ -213,12 +213,21 @@ def train(args: argparse.Namespace) -> None:
             optimizer.zero_grad(set_to_none=True)
             with autocast_context(device, args.precision):
                 gen_flat = model(labels)
-                loss = conditional_drift_loss_for_views(
-                    [(real_flat, gen_flat)],
-                    class_id_pos=labels,
-                    class_id_gen=labels,
-                    gamma=0.2,
-                    compile_drift=False,
+
+            # The pixel drift target uses high-dimensional pairwise distances
+            # and a large self-mask constant. Keep it in fp32 even when the
+            # generator forward runs under fp16/bf16 autocast.
+            loss = conditional_drift_loss_for_views(
+                [(real_flat.float(), gen_flat.float())],
+                class_id_pos=labels,
+                class_id_gen=labels,
+                gamma=0.2,
+                compile_drift=False,
+            )
+            if not torch.isfinite(loss):
+                raise FloatingPointError(
+                    f"Non-finite loss at epoch {epoch}, batch {num_batches}: "
+                    f"{float(loss.detach().cpu())}."
                 )
 
             scaler.scale(loss).backward()
