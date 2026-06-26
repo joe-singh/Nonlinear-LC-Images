@@ -90,10 +90,43 @@ Sample grids are saved as `samples_epoch_*.png`; checkpoints are saved as
 
 Good first runs are:
 
+- `--label-only` to test whether the decoder can learn class prototypes
+  without any random or LC latent state.
 - `--freeze-dynamics` versus learned dynamics.
+- `--num-steps 0` to test a decoder-only random latent baseline.
 - `--topology ring` versus `--topology random_sparse --k 4`.
 - `--n-oscillators 32`, `64`, and `128`.
 - `--num-steps 4` versus `8`.
+
+For a first dynamics-matter ablation, keep the seed, subset, decoder, and
+training budget fixed:
+
+```bash
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda --precision bf16 --seed 42 \
+    --label-only \
+    --n-oscillators 64 --epochs 25 --batch-size 256 --subset-size 10000 \
+    --out-dir runs/ablate_label_only_n64
+
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda --precision bf16 --seed 42 \
+    --n-oscillators 64 --num-steps 0 \
+    --epochs 25 --batch-size 256 --subset-size 10000 \
+    --out-dir runs/ablate_decoder_only_n64
+
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda --precision bf16 --seed 42 \
+    --n-oscillators 64 --topology ring --num-steps 8 --method rk4 \
+    --freeze-dynamics \
+    --epochs 25 --batch-size 256 --subset-size 10000 \
+    --out-dir runs/ablate_frozen_lc_n64
+
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda --precision bf16 --seed 42 \
+    --n-oscillators 64 --topology ring --num-steps 8 --method rk4 \
+    --epochs 25 --batch-size 256 --subset-size 10000 \
+    --out-dir runs/ablate_learned_lc_n64
+```
 
 Do not expect this toy baseline to match released Un-0 sample quality. The
 goal is to quickly test whether a passive nonlinear LC reservoir can serve as a

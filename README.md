@@ -122,7 +122,9 @@ Sample grids are saved as `samples_epoch_*.png`; checkpoints are saved as
 
 Useful first checks:
 
+- `--label-only` versus any random/dynamical latent source.
 - `--freeze-dynamics` versus learned dynamics.
+- `--num-steps 0` decoder-only random latent versus LC rollout.
 - `--topology ring` versus `--topology random_sparse --k 4`.
 - `--n-oscillators 32`, `64`, and `128`.
 - `--num-steps 4` versus `8`.

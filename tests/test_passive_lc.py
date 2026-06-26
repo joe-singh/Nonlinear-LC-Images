@@ -97,3 +97,20 @@ def test_passive_lc_generator_backward_has_finite_gradients() -> None:
     ]
     assert finite_grad_sums
     assert any(value > 0.0 for value in finite_grad_sums)
+
+
+def test_label_only_generator_skips_dynamics() -> None:
+    torch.manual_seed(4)
+    model = PassiveLCGenerator(n_oscillators=8, num_steps=2, label_only=True)
+    labels = torch.tensor([0, 1, 0, 1])
+
+    samples_a = model(labels)
+    samples_b = model(labels)
+    loss = samples_a.square().mean()
+    loss.backward()
+
+    assert samples_a.shape == (4, 3 * 32 * 32)
+    torch.testing.assert_close(samples_a, samples_b)
+    assert torch.isfinite(samples_a).all()
+    assert model.class_offset.weight.grad is not None
+    assert all(parameter.grad is None for parameter in model.dynamics.parameters())

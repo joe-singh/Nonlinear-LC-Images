@@ -329,6 +329,7 @@ class PassiveLCGenerator(nn.Module):
         image_size: int = 32,
         image_channels: int = 3,
         initial_state_scale: float = 0.1,
+        label_only: bool = False,
     ) -> None:
         super().__init__()
         if decoder_feature_dim != 128:
@@ -347,6 +348,7 @@ class PassiveLCGenerator(nn.Module):
         self.initial_state_scale = float(initial_state_scale)
         self.image_size = int(image_size)
         self.image_channels = int(image_channels)
+        self.label_only = bool(label_only)
 
         self.dynamics = PassiveLCDynamics(
             n=int(n_oscillators),
@@ -400,20 +402,23 @@ class PassiveLCGenerator(nn.Module):
         if torch.any(labels < 0) or torch.any(labels >= self.num_classes):
             raise ValueError(f"class_id values must be in [0, {self.num_classes}).")
 
-        y0 = self._sample_initial_state(
-            int(labels.shape[0]),
-            device=param.device,
-            dtype=param.dtype,
-            generator=generator,
-        )
-        y0 = y0 + self.class_offset(labels).to(dtype=param.dtype)
-        final_state = fixed_step_integrate(
-            lambda y, t: self.dynamics(y, t),
-            y0,
-            num_steps=self.num_steps,
-            integration_time=self.integration_time,
-            method=self.method,
-        )
+        if self.label_only:
+            final_state = self.class_offset(labels).to(dtype=param.dtype)
+        else:
+            y0 = self._sample_initial_state(
+                int(labels.shape[0]),
+                device=param.device,
+                dtype=param.dtype,
+                generator=generator,
+            )
+            y0 = y0 + self.class_offset(labels).to(dtype=param.dtype)
+            final_state = fixed_step_integrate(
+                lambda y, t: self.dynamics(y, t),
+                y0,
+                num_steps=self.num_steps,
+                integration_time=self.integration_time,
+                method=self.method,
+            )
         features = torch.tanh(self.readout(self.readout_norm(final_state)))
         return self.decoder(features)
 

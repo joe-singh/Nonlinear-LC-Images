@@ -53,6 +53,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Freeze LC dynamics parameters and train the rest as a reservoir baseline.",
     )
+    parser.add_argument(
+        "--label-only",
+        action="store_true",
+        help="Decode learned class embeddings only; no random LC state or dynamics rollout.",
+    )
     parser.add_argument("--sample-every", type=int, default=1)
     parser.add_argument(
         "--synthetic-data",
@@ -159,8 +164,9 @@ def build_model(args: argparse.Namespace, device: torch.device) -> PassiveLCGene
         integration_time=float(args.integration_time),
         method=args.method,
         num_classes=NUM_CLASSES,
+        label_only=bool(args.label_only),
     ).to(device)
-    if args.freeze_dynamics:
+    if args.freeze_dynamics or args.label_only:
         for parameter in model.dynamics.parameters():
             parameter.requires_grad_(False)
     return model
@@ -195,7 +201,16 @@ def train(args: argparse.Namespace) -> None:
     optimizer = torch.optim.AdamW(trainable, lr=float(args.lr))
     scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda" and args.precision == "fp16")
 
-    print(f"device={device} precision={args.precision} batches_per_epoch={len(loader)}")
+    if args.label_only:
+        mode = "label_only"
+    elif args.freeze_dynamics:
+        mode = "frozen_lc"
+    else:
+        mode = "learned_lc"
+    print(
+        f"device={device} precision={args.precision} mode={mode} "
+        f"batches_per_epoch={len(loader)}"
+    )
     save_samples(model, out_dir, epoch=0, device=device)
 
     for epoch in range(1, int(args.epochs) + 1):
