@@ -125,6 +125,7 @@ Useful first checks:
 - `--label-only` versus any random/dynamical latent source.
 - `--freeze-dynamics` versus learned dynamics.
 - `--num-steps 0` decoder-only random latent versus LC rollout.
+- `--decoder-width 8` or `16` to make dynamics differences less hidden by the decoder.
 - `--topology ring` versus `--topology random_sparse --k 4`.
 - `--n-oscillators 32`, `64`, and `128`.
 - `--num-steps 4` versus `8`.

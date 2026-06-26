@@ -81,6 +81,22 @@ def test_passive_lc_generator_returns_flat_cifar_images() -> None:
     assert torch.isfinite(samples).all()
 
 
+def test_passive_lc_generator_accepts_narrow_decoder() -> None:
+    torch.manual_seed(22)
+    model = PassiveLCGenerator(
+        n_oscillators=8,
+        num_steps=0,
+        decoder_width=8,
+    )
+    labels = torch.tensor([0, 1, 2, 3])
+
+    samples = model(labels)
+
+    assert model.decoder.hidden_channels == 8
+    assert samples.shape == (4, 3 * 32 * 32)
+    assert torch.isfinite(samples).all()
+
+
 def test_passive_lc_generator_backward_has_finite_gradients() -> None:
     torch.manual_seed(3)
     model = PassiveLCGenerator(n_oscillators=8, num_steps=2, integration_time=0.5)

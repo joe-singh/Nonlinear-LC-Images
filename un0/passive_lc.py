@@ -276,6 +276,7 @@ class _TinyResizeConvDecoder(nn.Module):
         image_size: int = 32,
         stem_channels: int = 8,
         stem_size: int = 4,
+        hidden_channels: int = 32,
     ) -> None:
         super().__init__()
         if feature_dim != stem_channels * stem_size * stem_size:
@@ -285,16 +286,19 @@ class _TinyResizeConvDecoder(nn.Module):
             )
         if image_size != 32 or stem_size != 4:
             raise ValueError("The toy decoder currently targets 32x32 images from a 4x4 stem.")
+        if hidden_channels < 1:
+            raise ValueError(f"hidden_channels must be positive, got {hidden_channels}.")
 
         self.feature_dim = int(feature_dim)
         self.output_dim = int(out_channels * image_size * image_size)
         self.stem_channels = int(stem_channels)
         self.stem_size = int(stem_size)
+        self.hidden_channels = int(hidden_channels)
         self.net = nn.Sequential(
-            _ResizeConvBlock(stem_channels, 32),
-            _ResizeConvBlock(32, 32),
-            _ResizeConvBlock(32, 32),
-            nn.Conv2d(32, out_channels, kernel_size=3, padding=1),
+            _ResizeConvBlock(stem_channels, self.hidden_channels),
+            _ResizeConvBlock(self.hidden_channels, self.hidden_channels),
+            _ResizeConvBlock(self.hidden_channels, self.hidden_channels),
+            nn.Conv2d(self.hidden_channels, out_channels, kernel_size=3, padding=1),
             nn.Tanh(),
         )
         self._init_weights()
@@ -330,6 +334,7 @@ class PassiveLCGenerator(nn.Module):
         image_channels: int = 3,
         initial_state_scale: float = 0.1,
         label_only: bool = False,
+        decoder_width: int = 32,
     ) -> None:
         super().__init__()
         if decoder_feature_dim != 128:
@@ -349,6 +354,7 @@ class PassiveLCGenerator(nn.Module):
         self.image_size = int(image_size)
         self.image_channels = int(image_channels)
         self.label_only = bool(label_only)
+        self.decoder_width = int(decoder_width)
 
         self.dynamics = PassiveLCDynamics(
             n=int(n_oscillators),
@@ -367,6 +373,7 @@ class PassiveLCGenerator(nn.Module):
             image_size=self.image_size,
             stem_channels=8,
             stem_size=4,
+            hidden_channels=self.decoder_width,
         )
 
     def _sample_initial_state(

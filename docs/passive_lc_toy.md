@@ -94,6 +94,8 @@ Good first runs are:
   without any random or LC latent state.
 - `--freeze-dynamics` versus learned dynamics.
 - `--num-steps 0` to test a decoder-only random latent baseline.
+- `--decoder-width 8` or `16` to reduce decoder capacity and expose whether
+  the LC rollout contributes useful latent structure.
 - `--topology ring` versus `--topology random_sparse --k 4`.
 - `--n-oscillators 32`, `64`, and `128`.
 - `--num-steps 4` versus `8`.
@@ -126,6 +128,32 @@ python scripts/train_passive_lc_toy_cifar10.py \
     --n-oscillators 64 --topology ring --num-steps 8 --method rk4 \
     --epochs 25 --batch-size 256 --subset-size 10000 \
     --out-dir runs/ablate_learned_lc_n64
+```
+
+If those look similar, rerun the latent-bearing rows with a weaker decoder:
+
+```bash
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda --precision bf16 --seed 42 \
+    --decoder-width 8 \
+    --n-oscillators 64 --num-steps 0 \
+    --epochs 25 --batch-size 256 --subset-size 10000 \
+    --out-dir runs/weakdec_decoder_only_n64_w8
+
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda --precision bf16 --seed 42 \
+    --decoder-width 8 \
+    --n-oscillators 64 --topology ring --num-steps 8 --method rk4 \
+    --freeze-dynamics \
+    --epochs 25 --batch-size 256 --subset-size 10000 \
+    --out-dir runs/weakdec_frozen_lc_n64_w8
+
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda --precision bf16 --seed 42 \
+    --decoder-width 8 \
+    --n-oscillators 64 --topology ring --num-steps 8 --method rk4 \
+    --epochs 25 --batch-size 256 --subset-size 10000 \
+    --out-dir runs/weakdec_learned_lc_n64_w8
 ```
 
 Do not expect this toy baseline to match released Un-0 sample quality. The

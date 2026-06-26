@@ -39,6 +39,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-steps", type=int, default=8)
     parser.add_argument("--method", choices=("euler", "rk4"), default="rk4")
     parser.add_argument("--integration-time", type=float, default=1.0)
+    parser.add_argument(
+        "--decoder-width",
+        type=int,
+        default=32,
+        help="Hidden channel width for the toy resize-conv decoder.",
+    )
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--lr", type=float, default=1e-3)
@@ -165,6 +171,7 @@ def build_model(args: argparse.Namespace, device: torch.device) -> PassiveLCGene
         method=args.method,
         num_classes=NUM_CLASSES,
         label_only=bool(args.label_only),
+        decoder_width=int(args.decoder_width),
     ).to(device)
     if args.freeze_dynamics or args.label_only:
         for parameter in model.dynamics.parameters():
@@ -209,6 +216,7 @@ def train(args: argparse.Namespace) -> None:
         mode = "learned_lc"
     print(
         f"device={device} precision={args.precision} mode={mode} "
+        f"decoder_width={args.decoder_width} "
         f"batches_per_epoch={len(loader)}"
     )
     save_samples(model, out_dir, epoch=0, device=device)
