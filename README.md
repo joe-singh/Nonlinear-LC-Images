@@ -53,6 +53,8 @@ behavior.
   integrator, and a small class-conditional CIFAR-10 generator.
 - `scripts/train_passive_lc_toy_cifar10.py`: lightweight toy training script
   using pixel-only conditional drift loss.
+- `scripts/eval_passive_lc_toy_fid.py`: optional clean-FID scoring for saved
+  toy checkpoints.
 - `tests/test_passive_lc.py`: CPU tests that do not download CIFAR-10.
 - `docs/passive_lc_toy.md`: experiment notes.
 - `docs/passive_lc_toy_colab.md`: copy-paste Colab setup and run commands.
@@ -85,6 +87,16 @@ Run the no-download smoke test:
     --max-batches 1 \
     --device cpu \
     --out-dir /tmp/passive_lc_smoke
+```
+
+Optionally install clean-FID and score a toy checkpoint:
+
+```bash
+.venv/bin/python -m pip install clean-fid
+.venv/bin/python scripts/eval_passive_lc_toy_fid.py \
+    --checkpoint runs/passive_lc_toy/final.pt \
+    --num-samples 5000 \
+    --output runs/passive_lc_toy/fid_5k.json
 ```
 
 ## Colab Setup

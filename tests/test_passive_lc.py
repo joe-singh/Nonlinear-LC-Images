@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
+
 import torch
 
 from un0.passive_lc import (
@@ -8,6 +11,16 @@ from un0.passive_lc import (
     fixed_step_integrate,
     make_lc_edges,
 )
+
+
+def _load_toy_fid_script():
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "eval_passive_lc_toy_fid.py"
+    spec = importlib.util.spec_from_file_location("eval_passive_lc_toy_fid", script_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _assert_valid_edges(edges: torch.Tensor, n: int) -> None:
@@ -130,3 +143,31 @@ def test_label_only_generator_skips_dynamics() -> None:
     assert torch.isfinite(samples_a).all()
     assert model.class_offset.weight.grad is not None
     assert all(parameter.grad is None for parameter in model.dynamics.parameters())
+
+
+def test_fid_eval_rebuilds_model_from_training_args() -> None:
+    module = _load_toy_fid_script()
+    ckpt_args = {
+        "n_oscillators": 8,
+        "topology": "chain",
+        "k": 2,
+        "seed": 9,
+        "num_steps": 0,
+        "integration_time": 0.75,
+        "method": "euler",
+        "label_only": True,
+        "decoder_width": 8,
+    }
+
+    model = module.build_model_from_checkpoint_args(
+        ckpt_args,
+        device=torch.device("cpu"),
+    )
+
+    assert model.dynamics.n == 8
+    assert model.dynamics.topology == "chain"
+    assert model.num_steps == 0
+    assert model.integration_time == 0.75
+    assert model.method == "euler"
+    assert model.label_only
+    assert model.decoder.hidden_channels == 8

@@ -86,6 +86,27 @@ python scripts/train_passive_lc_toy_cifar10.py \
 Sample grids are saved as `samples_epoch_*.png`; checkpoints are saved as
 `latest.pt` and `final.pt`.
 
+## FID Scoring
+
+The toy path does not compute FID during training, but checkpoints can be scored
+afterward with clean-FID:
+
+```bash
+pip install clean-fid
+
+python scripts/eval_passive_lc_toy_fid.py \
+    --checkpoint runs/weakdec_learned_lc_n64_w8/final.pt \
+    --num-samples 5000 \
+    --batch-size 256 \
+    --device cuda \
+    --output runs/weakdec_learned_lc_n64_w8/fid_5k.json
+```
+
+Use `--num-samples 5000` or `10000` for quick ranking across ablations. Use
+`--num-samples 50000` for a slower, more standard CIFAR-10 clean-FID estimate.
+Small-sample FID is noisy, but it is still useful for deciding which toy
+configuration deserves a longer run.
+
 ## First Comparisons
 
 Good first runs are:

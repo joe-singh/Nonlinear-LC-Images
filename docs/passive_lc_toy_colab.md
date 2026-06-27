@@ -64,6 +64,27 @@ runs/passive_lc_toy_colab/latest.pt
 runs/passive_lc_toy_colab/final.pt
 ```
 
+## FID Scoring
+
+Install clean-FID only when you want to score checkpoints:
+
+```python
+!pip install -q clean-fid
+```
+
+Quick 5k-sample ranking:
+
+```python
+!python scripts/eval_passive_lc_toy_fid.py \
+    --checkpoint runs/passive_lc_toy_colab/final.pt \
+    --num-samples 5000 \
+    --batch-size 256 \
+    --device cuda \
+    --output runs/passive_lc_toy_colab/fid_5k.json
+```
+
+Use `--num-samples 50000` for a slower, more standard CIFAR-10 clean-FID score.
+
 To pull updates after changes are pushed:
 
 ```python
