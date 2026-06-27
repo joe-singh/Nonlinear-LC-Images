@@ -83,6 +83,26 @@ print("grad norms:", last["mean_grad_norm"])
 print("LC delta:", last["lc_parameter_delta_from_init"])
 ```
 
+If learned LC has much smaller dynamics gradients than decoder/readout, try a
+dynamics learning-rate boost:
+
+```python
+!python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-width 8 \
+    --n-oscillators 64 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --dynamics-lr-multiplier 10 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/weakdec_learned_lc_n64_w8_dynlr10
+```
+
 ## FID Scoring
 
 Install clean-FID only when you want to score checkpoints:

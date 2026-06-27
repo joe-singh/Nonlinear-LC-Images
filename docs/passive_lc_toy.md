@@ -109,6 +109,26 @@ parameter movement should be zero or near-zero. In the learned-LC run:
 - Clear LC deltas with flat FID mean the LC block is trainable, but not helping
   the current image objective.
 
+If the dynamics gradients are much smaller than the decoder/readout gradients,
+try a dynamics-specific learning-rate multiplier:
+
+```bash
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-width 8 \
+    --n-oscillators 64 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --dynamics-lr-multiplier 10 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/weakdec_learned_lc_n64_w8_dynlr10
+```
+
 ## FID Scoring
 
 The toy path does not compute FID during training, but checkpoints can be scored

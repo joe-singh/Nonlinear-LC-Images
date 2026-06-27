@@ -210,3 +210,42 @@ def test_training_diagnostics_track_lc_delta_and_grad_norms() -> None:
         model.dynamics.raw_C.add_(0.01)
     moved_delta = module.lc_parameter_delta_summary(model, reference)
     assert moved_delta["C"]["mean_abs"] > 0.0
+
+
+def test_training_optimizer_can_boost_dynamics_lr() -> None:
+    module = _load_toy_train_script()
+    model = PassiveLCGenerator(n_oscillators=8, num_steps=2, integration_time=0.5)
+
+    optimizer, trainable, optimizer_lrs = module.build_optimizer(
+        model,
+        lr=1e-3,
+        dynamics_lr_multiplier=10.0,
+    )
+
+    assert trainable
+    assert optimizer_lrs["dynamics"] == 1e-2
+    assert optimizer_lrs["non_dynamics"] == 1e-3
+    assert len(optimizer.param_groups) == 2
+    assert sorted(group["name"] for group in optimizer.param_groups) == [
+        "dynamics",
+        "non_dynamics",
+    ]
+
+
+def test_training_optimizer_omits_frozen_dynamics_group() -> None:
+    module = _load_toy_train_script()
+    model = PassiveLCGenerator(n_oscillators=8, num_steps=2, integration_time=0.5)
+    for parameter in model.dynamics.parameters():
+        parameter.requires_grad_(False)
+
+    optimizer, trainable, optimizer_lrs = module.build_optimizer(
+        model,
+        lr=1e-3,
+        dynamics_lr_multiplier=10.0,
+    )
+
+    assert trainable
+    assert optimizer_lrs["dynamics"] == 0.0
+    assert optimizer_lrs["non_dynamics"] == 1e-3
+    assert len(optimizer.param_groups) == 1
+    assert optimizer.param_groups[0]["name"] == "non_dynamics"

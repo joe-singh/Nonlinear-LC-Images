@@ -143,6 +143,8 @@ Useful first checks:
 - `--topology ring` versus `--topology random_sparse --k 4`.
 - `--n-oscillators 32`, `64`, and `128`.
 - `--num-steps 4` versus `8`.
+- `--dynamics-lr-multiplier 10` versus `1` to test whether LC parameters need
+  a larger learning-rate scale than the neural readout/decoder.
 
 For LC usefulness, compare `diagnostics.json` across ablations. If
 `mean_grad_norm.dynamics` and `lc_parameter_delta_from_init` are near zero in

@@ -50,6 +50,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument(
+        "--dynamics-lr-multiplier",
+        type=float,
+        default=1.0,
+        help="Multiply the base learning rate for trainable LC dynamics parameters.",
+    )
     parser.add_argument("--subset-size", type=int, default=10000)
     parser.add_argument("--max-batches", type=int, default=0)
     parser.add_argument("--device", default="auto")
@@ -242,6 +248,60 @@ def module_gradient_norms(model: PassiveLCGenerator) -> dict[str, float]:
     }
 
 
+def build_optimizer(
+    model: PassiveLCGenerator,
+    *,
+    lr: float,
+    dynamics_lr_multiplier: float,
+) -> tuple[torch.optim.Optimizer, list[nn.Parameter], dict[str, float]]:
+    """Build AdamW with an optional higher LR for trainable LC parameters."""
+    if lr <= 0.0:
+        raise ValueError(f"lr must be positive, got {lr}.")
+    if dynamics_lr_multiplier <= 0.0:
+        raise ValueError(
+            f"dynamics_lr_multiplier must be positive, got {dynamics_lr_multiplier}."
+        )
+
+    dynamics_parameters = [
+        parameter for parameter in model.dynamics.parameters() if parameter.requires_grad
+    ]
+    dynamics_parameter_ids = {id(parameter) for parameter in dynamics_parameters}
+    other_parameters = [
+        parameter
+        for parameter in model.parameters()
+        if parameter.requires_grad and id(parameter) not in dynamics_parameter_ids
+    ]
+    trainable = dynamics_parameters + other_parameters
+    if not trainable:
+        raise ValueError("No trainable parameters remain after applying --freeze-dynamics.")
+
+    dynamics_lr = lr * dynamics_lr_multiplier
+    parameter_groups = []
+    if dynamics_parameters:
+        parameter_groups.append(
+            {
+                "params": dynamics_parameters,
+                "lr": dynamics_lr,
+                "name": "dynamics",
+            }
+        )
+    if other_parameters:
+        parameter_groups.append(
+            {
+                "params": other_parameters,
+                "lr": lr,
+                "name": "non_dynamics",
+            }
+        )
+
+    optimizer = torch.optim.AdamW(parameter_groups)
+    optimizer_lrs = {
+        "dynamics": dynamics_lr if dynamics_parameters else 0.0,
+        "non_dynamics": lr if other_parameters else 0.0,
+    }
+    return optimizer, trainable, optimizer_lrs
+
+
 def write_diagnostics(out_dir: Path, diagnostics: dict[str, Any]) -> None:
     (out_dir / "diagnostics.json").write_text(json.dumps(diagnostics, indent=2) + "\n")
 
@@ -292,19 +352,21 @@ def train(args: argparse.Namespace) -> None:
 
     loader = build_loader(args, device)
     model = build_model(args, device)
+    optimizer, trainable, optimizer_lrs = build_optimizer(
+        model,
+        lr=float(args.lr),
+        dynamics_lr_multiplier=float(args.dynamics_lr_multiplier),
+    )
     initial_lc_parameters = lc_parameter_snapshot(model)
     diagnostics: dict[str, Any] = {
         "mode": None,
         "args": vars(args),
+        "optimizer_lrs": optimizer_lrs,
         "initial_lc_parameters": {
             name: tensor_summary(value) for name, value in initial_lc_parameters.items()
         },
         "epochs": [],
     }
-    trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
-    if not trainable:
-        raise ValueError("No trainable parameters remain after applying --freeze-dynamics.")
-    optimizer = torch.optim.AdamW(trainable, lr=float(args.lr))
     scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda" and args.precision == "fp16")
 
     if args.label_only:
@@ -318,6 +380,7 @@ def train(args: argparse.Namespace) -> None:
     print(
         f"device={device} precision={args.precision} mode={mode} "
         f"decoder_width={args.decoder_width} "
+        f"lr={float(args.lr):.2e} dynamics_lr={optimizer_lrs['dynamics']:.2e} "
         f"batches_per_epoch={len(loader)}"
     )
     save_samples(model, out_dir, epoch=0, device=device)
