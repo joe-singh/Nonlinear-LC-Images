@@ -86,6 +86,29 @@ python scripts/train_passive_lc_toy_cifar10.py \
 Sample grids are saved as `samples_epoch_*.png`; checkpoints are saved as
 `latest.pt` and `final.pt`.
 
+## LC Diagnostics
+
+Every training run writes `diagnostics.json` in the run directory. It contains:
+
+- `mean_grad_norm`: epoch-averaged L2 gradient norms for `dynamics`,
+  `class_offset`, `readout`, and `decoder`.
+- `lc_parameter_delta_from_init`: mean/max absolute movement and mean relative
+  movement for the physical `C`, `L`, `Cj0`, and `Vbias` parameters.
+
+The epoch log also prints a compact version:
+
+```text
+epoch 1: loss=... grad_norm dyn=... readout=... decoder=... lc_delta C=... L=... Cj0=... Vbias=...
+```
+
+For the decoder-only and frozen-LC baselines, dynamics gradient norms and LC
+parameter movement should be zero or near-zero. In the learned-LC run:
+
+- Small dynamics gradients plus tiny LC deltas mean the optimizer is effectively
+  ignoring the physical parameters.
+- Clear LC deltas with flat FID mean the LC block is trainable, but not helping
+  the current image objective.
+
 ## FID Scoring
 
 The toy path does not compute FID during training, but checkpoints can be scored

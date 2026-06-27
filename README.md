@@ -128,7 +128,9 @@ Recommended first toy run:
 ```
 
 Sample grids are saved as `samples_epoch_*.png`; checkpoints are saved as
-`latest.pt` and `final.pt` in the selected run directory.
+`latest.pt` and `final.pt` in the selected run directory. Training also writes
+`diagnostics.json`, including epoch losses, gradient norms for dynamics/readout/
+decoder groups, and physical LC parameter movement from initialization.
 
 ## First Comparisons
 
@@ -141,6 +143,12 @@ Useful first checks:
 - `--topology ring` versus `--topology random_sparse --k 4`.
 - `--n-oscillators 32`, `64`, and `128`.
 - `--num-steps 4` versus `8`.
+
+For LC usefulness, compare `diagnostics.json` across ablations. If
+`mean_grad_norm.dynamics` and `lc_parameter_delta_from_init` are near zero in
+the learned-LC run, the optimizer is not using the physical parameters. If they
+move substantially but FID stays flat, the dynamics are trainable but are not
+helping this toy CIFAR objective.
 
 ## Upstream Attribution
 

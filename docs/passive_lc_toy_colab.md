@@ -64,6 +64,25 @@ runs/passive_lc_toy_colab/latest.pt
 runs/passive_lc_toy_colab/final.pt
 ```
 
+Training diagnostics are saved as:
+
+```text
+runs/passive_lc_toy_colab/diagnostics.json
+```
+
+Quickly inspect the final gradient norms and LC parameter movement:
+
+```python
+import json
+
+with open("runs/passive_lc_toy_colab/diagnostics.json") as f:
+    diagnostics = json.load(f)
+
+last = diagnostics["epochs"][-1]
+print("grad norms:", last["mean_grad_norm"])
+print("LC delta:", last["lc_parameter_delta_from_init"])
+```
+
 ## FID Scoring
 
 Install clean-FID only when you want to score checkpoints:

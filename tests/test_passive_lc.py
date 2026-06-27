@@ -23,6 +23,18 @@ def _load_toy_fid_script():
     return module
 
 
+def _load_toy_train_script():
+    script_path = (
+        Path(__file__).resolve().parents[1] / "scripts" / "train_passive_lc_toy_cifar10.py"
+    )
+    spec = importlib.util.spec_from_file_location("train_passive_lc_toy_cifar10", script_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _assert_valid_edges(edges: torch.Tensor, n: int) -> None:
     assert edges.dtype == torch.long
     assert edges.ndim == 2
@@ -171,3 +183,30 @@ def test_fid_eval_rebuilds_model_from_training_args() -> None:
     assert model.method == "euler"
     assert model.label_only
     assert model.decoder.hidden_channels == 8
+
+
+def test_training_diagnostics_track_lc_delta_and_grad_norms() -> None:
+    module = _load_toy_train_script()
+    torch.manual_seed(5)
+    model = PassiveLCGenerator(n_oscillators=8, num_steps=2, integration_time=0.5)
+    labels = torch.tensor([0, 1, 2, 3])
+    reference = module.lc_parameter_snapshot(model)
+
+    initial_delta = module.lc_parameter_delta_summary(model, reference)
+    assert initial_delta["C"]["mean_abs"] == 0.0
+    assert initial_delta["L"]["mean_abs"] == 0.0
+    assert initial_delta["Cj0"]["mean_abs"] == 0.0
+    assert initial_delta["Vbias"]["mean_abs"] == 0.0
+
+    loss = model(labels).square().mean()
+    loss.backward()
+    grad_norms = module.module_gradient_norms(model)
+
+    assert grad_norms["dynamics"] > 0.0
+    assert grad_norms["decoder"] > 0.0
+    assert all(torch.isfinite(torch.tensor(value)) for value in grad_norms.values())
+
+    with torch.no_grad():
+        model.dynamics.raw_C.add_(0.01)
+    moved_delta = module.lc_parameter_delta_summary(model, reference)
+    assert moved_delta["C"]["mean_abs"] > 0.0

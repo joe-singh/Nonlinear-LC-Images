@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import nullcontext
+import json
 from pathlib import Path
 import sys
 from typing import Any
@@ -25,6 +26,7 @@ from un0.passive_lc import PassiveLCGenerator  # noqa: E402
 IMAGE_SIZE = 32
 NUM_CLASSES = 10
 GRAD_CLIP_NORM = 1.0
+LC_PARAMETER_NAMES = ("C", "L", "Cj0", "Vbias")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -179,19 +181,107 @@ def build_model(args: argparse.Namespace, device: torch.device) -> PassiveLCGene
     return model
 
 
+@torch.no_grad()
+def lc_parameter_snapshot(model: PassiveLCGenerator) -> dict[str, Tensor]:
+    """Return detached physical LC parameters, not raw unconstrained tensors."""
+    return {
+        name: value.detach().float().cpu().clone()
+        for name, value in zip(LC_PARAMETER_NAMES, model.dynamics.positive_parameters())
+    }
+
+
+def tensor_summary(tensor: Tensor) -> dict[str, float]:
+    values = tensor.detach().float().cpu()
+    return {
+        "mean": float(values.mean()),
+        "std": float(values.std(unbiased=False)),
+        "min": float(values.min()),
+        "max": float(values.max()),
+    }
+
+
+def lc_parameter_delta_summary(
+    model: PassiveLCGenerator,
+    reference: dict[str, Tensor],
+) -> dict[str, dict[str, float]]:
+    """Summarize absolute movement in physical LC parameters since reference."""
+    current = lc_parameter_snapshot(model)
+    summary: dict[str, dict[str, float]] = {}
+    for name in LC_PARAMETER_NAMES:
+        delta = (current[name] - reference[name]).abs()
+        relative = delta / reference[name].abs().clamp_min(1e-12)
+        summary[name] = {
+            "mean_abs": float(delta.mean()),
+            "max_abs": float(delta.max()),
+            "mean_relative": float(relative.mean()),
+        }
+    return summary
+
+
+def _parameter_grad_norm(parameters) -> float:
+    total_sq = 0.0
+    for parameter in parameters:
+        if parameter.grad is None:
+            continue
+        grad = parameter.grad.detach().float()
+        if not torch.isfinite(grad).all():
+            return float("nan")
+        norm = float(grad.norm(2))
+        total_sq += norm * norm
+    return total_sq**0.5
+
+
+def module_gradient_norms(model: PassiveLCGenerator) -> dict[str, float]:
+    """Return L2 gradient norms for the main trainable module groups."""
+    readout_parameters = list(model.readout_norm.parameters()) + list(model.readout.parameters())
+    return {
+        "dynamics": _parameter_grad_norm(model.dynamics.parameters()),
+        "class_offset": _parameter_grad_norm(model.class_offset.parameters()),
+        "readout": _parameter_grad_norm(readout_parameters),
+        "decoder": _parameter_grad_norm(model.decoder.parameters()),
+    }
+
+
+def write_diagnostics(out_dir: Path, diagnostics: dict[str, Any]) -> None:
+    (out_dir / "diagnostics.json").write_text(json.dumps(diagnostics, indent=2) + "\n")
+
+
+def format_grad_norms(norms: dict[str, float]) -> str:
+    return (
+        "grad_norm "
+        f"dyn={norms['dynamics']:.2e} "
+        f"readout={norms['readout']:.2e} "
+        f"decoder={norms['decoder']:.2e}"
+    )
+
+
+def format_lc_delta(delta: dict[str, dict[str, float]]) -> str:
+    return (
+        "lc_delta "
+        f"C={delta['C']['mean_abs']:.2e} "
+        f"L={delta['L']['mean_abs']:.2e} "
+        f"Cj0={delta['Cj0']['mean_abs']:.2e} "
+        f"Vbias={delta['Vbias']['mean_abs']:.2e}"
+    )
+
+
 def checkpoint_payload(
     *,
     model: nn.Module,
     optimizer: torch.optim.Optimizer,
     epoch: int,
     args: argparse.Namespace,
+    diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "epoch": int(epoch),
         "model": model.state_dict(),
         "optimizer": optimizer.state_dict(),
         "args": vars(args),
     }
+    if diagnostics is not None:
+        payload["diagnostics"] = diagnostics
+    return payload
 
 
 def train(args: argparse.Namespace) -> None:
@@ -202,6 +292,15 @@ def train(args: argparse.Namespace) -> None:
 
     loader = build_loader(args, device)
     model = build_model(args, device)
+    initial_lc_parameters = lc_parameter_snapshot(model)
+    diagnostics: dict[str, Any] = {
+        "mode": None,
+        "args": vars(args),
+        "initial_lc_parameters": {
+            name: tensor_summary(value) for name, value in initial_lc_parameters.items()
+        },
+        "epochs": [],
+    }
     trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
     if not trainable:
         raise ValueError("No trainable parameters remain after applying --freeze-dynamics.")
@@ -214,6 +313,8 @@ def train(args: argparse.Namespace) -> None:
         mode = "frozen_lc"
     else:
         mode = "learned_lc"
+    diagnostics["mode"] = mode
+    write_diagnostics(out_dir, diagnostics)
     print(
         f"device={device} precision={args.precision} mode={mode} "
         f"decoder_width={args.decoder_width} "
@@ -225,6 +326,12 @@ def train(args: argparse.Namespace) -> None:
         model.train()
         total_loss = 0.0
         num_batches = 0
+        grad_norm_totals = {
+            "dynamics": 0.0,
+            "class_offset": 0.0,
+            "readout": 0.0,
+            "decoder": 0.0,
+        }
         progress = tqdm(loader, desc=f"epoch {epoch}", leave=False)
         for images, labels in progress:
             if int(args.max_batches) > 0 and num_batches >= int(args.max_batches):
@@ -255,6 +362,9 @@ def train(args: argparse.Namespace) -> None:
 
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
+            batch_grad_norms = module_gradient_norms(model)
+            for name, value in batch_grad_norms.items():
+                grad_norm_totals[name] += value
             torch.nn.utils.clip_grad_norm_(trainable, GRAD_CLIP_NORM)
             scaler.step(optimizer)
             scaler.update()
@@ -265,17 +375,46 @@ def train(args: argparse.Namespace) -> None:
             progress.set_postfix(loss=f"{loss_value:.4f}")
 
         mean_loss = total_loss / max(num_batches, 1)
-        print(f"epoch {epoch}: loss={mean_loss:.6f}")
+        mean_grad_norms = {
+            name: value / max(num_batches, 1) for name, value in grad_norm_totals.items()
+        }
+        lc_delta = lc_parameter_delta_summary(model, initial_lc_parameters)
+        diagnostics["epochs"].append(
+            {
+                "epoch": int(epoch),
+                "loss": mean_loss,
+                "mean_grad_norm": mean_grad_norms,
+                "lc_parameter_delta_from_init": lc_delta,
+            }
+        )
+        diagnostics["latest_lc_parameter_delta_from_init"] = lc_delta
+        write_diagnostics(out_dir, diagnostics)
+        print(
+            f"epoch {epoch}: loss={mean_loss:.6f} "
+            f"{format_grad_norms(mean_grad_norms)} {format_lc_delta(lc_delta)}"
+        )
 
         torch.save(
-            checkpoint_payload(model=model, optimizer=optimizer, epoch=epoch, args=args),
+            checkpoint_payload(
+                model=model,
+                optimizer=optimizer,
+                epoch=epoch,
+                args=args,
+                diagnostics=diagnostics,
+            ),
             out_dir / "latest.pt",
         )
         if int(args.sample_every) > 0 and epoch % int(args.sample_every) == 0:
             save_samples(model, out_dir, epoch=epoch, device=device)
 
     torch.save(
-        checkpoint_payload(model=model, optimizer=optimizer, epoch=int(args.epochs), args=args),
+        checkpoint_payload(
+            model=model,
+            optimizer=optimizer,
+            epoch=int(args.epochs),
+            args=args,
+            diagnostics=diagnostics,
+        ),
         out_dir / "final.pt",
     )
 
