@@ -85,6 +85,7 @@ def build_model_from_checkpoint_args(
         num_classes=NUM_CLASSES,
         label_only=bool(ckpt_args.get("label_only", False)),
         decoder_width=int(ckpt_args.get("decoder_width", 32)),
+        decoder_type=str(ckpt_args.get("decoder_type", "conv")),
     )
     return model.to(device)
 

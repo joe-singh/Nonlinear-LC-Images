@@ -129,6 +129,73 @@ python scripts/train_passive_lc_toy_cifar10.py \
     --out-dir runs/weakdec_learned_lc_n64_w8_dynlr10
 ```
 
+## Direct Linear Decoder
+
+Use `--decoder-type linear` to remove the resize-conv image stack. This changes
+the image head from:
+
+```text
+LC state -> LayerNorm -> Linear(128) -> resize-conv stack -> image
+```
+
+to:
+
+```text
+LC state -> LayerNorm -> Linear(3*32*32) -> tanh -> image
+```
+
+This is a harsher test of whether LC dynamics matter, because the decoder no
+longer has convolutional upsampling layers that can create spatial image texture
+from a generic latent vector. Good first linear-head ablations are:
+
+```bash
+# Decoder-only linear head
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type linear \
+    --n-oscillators 64 \
+    --topology ring \
+    --num-steps 0 \
+    --method rk4 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/linear_decoder_only_n64
+
+# Frozen LC with linear head
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type linear \
+    --n-oscillators 64 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --freeze-dynamics \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/linear_frozen_lc_n64
+
+# Learned LC with linear head
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type linear \
+    --n-oscillators 64 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/linear_learned_lc_n64
+```
+
 ## FID Scoring
 
 The toy path does not compute FID during training, but checkpoints can be scored

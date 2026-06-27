@@ -103,6 +103,63 @@ dynamics learning-rate boost:
     --out-dir runs/weakdec_learned_lc_n64_w8_dynlr10
 ```
 
+## Linear Decoder Ablation
+
+Use `--decoder-type linear` to replace the resize-conv stack with a direct
+`LayerNorm -> Linear -> tanh` pixel head. Run these three cells and compare FID:
+
+```python
+# Decoder-only linear head
+!python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type linear \
+    --n-oscillators 64 \
+    --topology ring \
+    --num-steps 0 \
+    --method rk4 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/linear_decoder_only_n64
+```
+
+```python
+# Frozen LC with linear head
+!python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type linear \
+    --n-oscillators 64 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --freeze-dynamics \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/linear_frozen_lc_n64
+```
+
+```python
+# Learned LC with linear head
+!python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type linear \
+    --n-oscillators 64 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/linear_learned_lc_n64
+```
+
 ## FID Scoring
 
 Install clean-FID only when you want to score checkpoints:

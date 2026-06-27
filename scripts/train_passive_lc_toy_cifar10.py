@@ -42,6 +42,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--method", choices=("euler", "rk4"), default="rk4")
     parser.add_argument("--integration-time", type=float, default=1.0)
     parser.add_argument(
+        "--decoder-type",
+        choices=("conv", "linear"),
+        default="conv",
+        help="Use the resize-conv image decoder or a direct linear pixel decoder.",
+    )
+    parser.add_argument(
         "--decoder-width",
         type=int,
         default=32,
@@ -180,6 +186,7 @@ def build_model(args: argparse.Namespace, device: torch.device) -> PassiveLCGene
         num_classes=NUM_CLASSES,
         label_only=bool(args.label_only),
         decoder_width=int(args.decoder_width),
+        decoder_type=args.decoder_type,
     ).to(device)
     if args.freeze_dynamics or args.label_only:
         for parameter in model.dynamics.parameters():
@@ -379,7 +386,7 @@ def train(args: argparse.Namespace) -> None:
     write_diagnostics(out_dir, diagnostics)
     print(
         f"device={device} precision={args.precision} mode={mode} "
-        f"decoder_width={args.decoder_width} "
+        f"decoder_type={args.decoder_type} decoder_width={args.decoder_width} "
         f"lr={float(args.lr):.2e} dynamics_lr={optimizer_lrs['dynamics']:.2e} "
         f"batches_per_epoch={len(loader)}"
     )
