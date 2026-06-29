@@ -171,7 +171,9 @@ def class_balanced_labels(
 
 
 @torch.no_grad()
-def save_samples(model: PassiveLCGenerator, out_dir: Path, epoch: int, device: torch.device) -> None:
+def save_samples(
+    model: PassiveLCGenerator, out_dir: Path, epoch: int, device: torch.device
+) -> None:
     labels = class_balanced_labels(samples_per_class=8, device=device)
     images = model.sample_images(labels)
     save_image(images.cpu(), out_dir / f"samples_epoch_{epoch:03d}.png", nrow=8)
@@ -268,9 +270,7 @@ def build_optimizer(
     if lr <= 0.0:
         raise ValueError(f"lr must be positive, got {lr}.")
     if dynamics_lr_multiplier <= 0.0:
-        raise ValueError(
-            f"dynamics_lr_multiplier must be positive, got {dynamics_lr_multiplier}."
-        )
+        raise ValueError(f"dynamics_lr_multiplier must be positive, got {dynamics_lr_multiplier}.")
 
     dynamics_parameters = [
         parameter for parameter in model.dynamics.parameters() if parameter.requires_grad
@@ -377,7 +377,9 @@ def train(args: argparse.Namespace) -> None:
         },
         "epochs": [],
     }
-    scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda" and args.precision == "fp16")
+    scaler = torch.amp.GradScaler(
+        "cuda", enabled=device.type == "cuda" and args.precision == "fp16"
+    )
 
     if args.label_only:
         mode = "label_only"

@@ -325,8 +325,7 @@ class _LinearPixelDecoder(nn.Module):
     def forward(self, pixels: Tensor) -> Tensor:
         if pixels.ndim != 2 or pixels.shape[1] != self.output_dim:
             raise ValueError(
-                f"pixels must have shape (batch, {self.output_dim}), "
-                f"got {tuple(pixels.shape)}."
+                f"pixels must have shape (batch, {self.output_dim}), got {tuple(pixels.shape)}."
             )
         return self.net(pixels)
 
@@ -363,9 +362,7 @@ class PassiveLCGenerator(nn.Module):
         if num_classes < 1:
             raise ValueError(f"num_classes must be positive, got {num_classes}.")
         if initial_state_scale <= 0.0:
-            raise ValueError(
-                f"initial_state_scale must be positive, got {initial_state_scale}."
-            )
+            raise ValueError(f"initial_state_scale must be positive, got {initial_state_scale}.")
 
         self.num_classes = int(num_classes)
         self.num_steps = int(num_steps)
