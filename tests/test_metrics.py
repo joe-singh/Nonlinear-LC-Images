@@ -58,6 +58,32 @@ def test_compute_fid_cifar_path_uses_named_stats_and_balanced_ids() -> None:
     fake_fid.make_custom_stats.assert_not_called()
 
 
+def test_compute_fid_can_upsample_lowres_outputs_for_cifar_stats() -> None:
+    """Low-res model outputs can be upsampled only for CIFAR clean-FID scoring."""
+    model = MagicMock()
+    fake_fid = MagicMock()
+    fake_fid.compute_fid.return_value = 23.0
+
+    with (
+        patch.dict("sys.modules", {"cleanfid": MagicMock(fid=fake_fid)}),
+        patch("un0.metrics._dump_samples") as dump,
+    ):
+        value = compute_fid(
+            model,
+            num_samples=20,
+            num_classes=10,
+            batch_size=5,
+            device=torch.device("cpu"),
+            image_size=8,
+            fid_image_size=32,
+        )
+
+    assert value == 23.0
+    assert dump.call_args.kwargs["image_size"] == 8
+    assert dump.call_args.kwargs["save_image_size"] == 32
+    assert fake_fid.compute_fid.call_args.kwargs["dataset_res"] == 32
+
+
 def test_compute_fid_imagenet_path_builds_custom_stats_and_uses_given_ids() -> None:
     """ImageNet path: when real_image_dir is set, build custom stats from it and
     score with dataset_split='custom'; gen is conditioned on the given ids 1-to-1
@@ -140,6 +166,29 @@ def test_dump_samples_uses_explicit_class_ids_in_order(tmp_path) -> None:
 
     sampled = torch.cat([c.args[0] for c in model.sample.call_args_list])
     assert torch.equal(sampled, class_ids)
+
+
+def test_dump_samples_can_upsample_saved_pngs(tmp_path) -> None:
+    """Low-res generated tensors are resized only when writing PNGs."""
+    from un0.metrics import _dump_samples
+
+    model = MagicMock()
+    model.sample.return_value = torch.zeros(2, 3 * 8 * 8)
+    class_ids = torch.tensor([0, 1])
+
+    with patch("un0.metrics.save_image") as save:
+        _dump_samples(
+            model,
+            class_ids=class_ids,
+            batch_size=2,
+            device=torch.device("cpu"),
+            image_dir=tmp_path,
+            image_size=8,
+            save_image_size=32,
+        )
+
+    assert save.call_count == 2
+    assert save.call_args_list[0].args[0].shape == (3, 32, 32)
 
 
 def test_shard_for_rank_partitions_without_gaps_or_overlap() -> None:

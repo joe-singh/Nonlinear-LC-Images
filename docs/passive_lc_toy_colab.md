@@ -6,7 +6,7 @@ editable mode without dependency resolution.
 ## Setup
 
 ```python
-!git clone --branch passive-lc-toy https://github.com/joe-singh/Nonlinear-LC-Images.git
+!git clone https://github.com/joe-singh/Nonlinear-LC-Images.git
 %cd Nonlinear-LC-Images
 ```
 
@@ -166,6 +166,51 @@ Use `--decoder-type state` to remove the learned readout and decoder. For
 CIFAR-10 this requires `--n-oscillators 1536`, because the LC state has
 dimension `2 * n_oscillators` and the flat image has dimension `3 * 32 * 32`.
 
+For quick experiments, train on CIFAR resized to `8x8` instead. Then the flat
+image has dimension `3 * 8 * 8 = 192`, so decoderless LC only needs
+`--n-oscillators 96`. Sample grids are upsampled for viewing, but the training
+loss is computed on the actual `8x8` targets.
+
+```python
+!python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type state \
+    --image-size 8 \
+    --n-oscillators 96 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --varactor-m 0.5 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/state_lowres8_ring_m0p5
+```
+
+Sweep the fixed varactor grading exponent with otherwise identical settings:
+
+```python
+!python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type state \
+    --image-size 8 \
+    --n-oscillators 96 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --varactor-m 0.33 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/state_lowres8_ring_m0p33
+```
+
+The full `32x32` decoderless run is much heavier:
+
 ```python
 !python scripts/train_passive_lc_toy_cifar10.py \
     --device cuda \
@@ -199,6 +244,19 @@ Quick 5k-sample ranking:
     --batch-size 256 \
     --device cuda \
     --output runs/passive_lc_toy_colab/fid_5k.json
+```
+
+For low-resolution decoderless checkpoints, generated `8x8` samples are
+upsampled to `32x32` only for CIFAR FID:
+
+```python
+!python scripts/eval_passive_lc_toy_fid.py \
+    --checkpoint runs/state_lowres8_ring_m0p5/final.pt \
+    --num-samples 5000 \
+    --batch-size 512 \
+    --device cuda \
+    --fid-image-size 32 \
+    --output runs/state_lowres8_ring_m0p5/fid_5k.json
 ```
 
 Use `--num-samples 50000` for a slower, more standard CIFAR-10 clean-FID score.

@@ -46,6 +46,20 @@ LayerNorm(final_state) -> Linear(2N, 128) -> tanh -> resize-conv decoder
 ```
 
 The output is a flat tensor with shape `(batch, 3 * 32 * 32)` in `[-1, 1]`.
+Pass `--image-size` to train against resized CIFAR targets instead. With
+`--image-size 8`, the flat image dimension is `3 * 8 * 8 = 192`.
+
+For `--decoder-type state`, the learned readout and decoder are removed:
+
+```text
+LC final state -> tanh -> image pixels
+```
+
+This requires `2 * n_oscillators == 3 * image_size * image_size`; for
+`--image-size 8`, use `--n-oscillators 96`.
+
+The varactor exponent `m` is a fixed hyperparameter, exposed as `--varactor-m`.
+It is not learned by default.
 
 ## Training
 
@@ -67,6 +81,30 @@ python scripts/train_passive_lc_toy_cifar10.py \
 ```
 
 No DINO, FID, W&B, DDP, or `torch.compile` is used in this path.
+
+For a lightweight no-decoder probe:
+
+```bash
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type state \
+    --image-size 8 \
+    --n-oscillators 96 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --varactor-m 0.5 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/state_lowres8_ring_m0p5
+```
+
+Sweep `--varactor-m 0.33`, `0.5`, and `1.0` with the same seed and output
+settings to test whether the nonlinear capacitance law changes the low-res
+decoderless image distribution.
 
 For a no-download CPU smoke test:
 

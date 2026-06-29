@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
 from un0.metrics import compute_fid  # noqa: E402
 from un0.passive_lc import PassiveLCGenerator  # noqa: E402
 
-IMAGE_SIZE = 32
+CIFAR_IMAGE_SIZE = 32
 NUM_CLASSES = 10
 DEFAULT_NUM_SAMPLES = 5000
 DEFAULT_BATCH_SIZE = 256
@@ -36,6 +36,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
+    parser.add_argument(
+        "--fid-image-size",
+        type=int,
+        default=CIFAR_IMAGE_SIZE,
+        help=(
+            "Resolution written for clean-FID scoring. Low-res checkpoints are "
+            "upsampled to this size; keep 32 for CIFAR-10 comparisons."
+        ),
+    )
     parser.add_argument("--device", default="auto")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
@@ -82,10 +91,12 @@ def build_model_from_checkpoint_args(
         num_steps=int(ckpt_args.get("num_steps", 8)),
         integration_time=float(ckpt_args.get("integration_time", 1.0)),
         method=str(ckpt_args.get("method", "rk4")),
+        image_size=int(ckpt_args.get("image_size", CIFAR_IMAGE_SIZE)),
         num_classes=NUM_CLASSES,
         label_only=bool(ckpt_args.get("label_only", False)),
         decoder_width=int(ckpt_args.get("decoder_width", 32)),
         decoder_type=str(ckpt_args.get("decoder_type", "conv")),
+        varactor_m=float(ckpt_args.get("varactor_m", 0.5)),
     )
     return model.to(device)
 
@@ -116,7 +127,8 @@ def evaluate(args: argparse.Namespace) -> float:
         num_classes=NUM_CLASSES,
         batch_size=int(args.batch_size),
         device=device,
-        image_size=IMAGE_SIZE,
+        image_size=int(ckpt_args.get("image_size", CIFAR_IMAGE_SIZE)),
+        fid_image_size=int(args.fid_image_size),
         image_dir=args.image_dir,
     )
 
@@ -130,6 +142,7 @@ def evaluate(args: argparse.Namespace) -> float:
                     "checkpoint": str(args.checkpoint),
                     "num_samples": int(args.num_samples),
                     "batch_size": int(args.batch_size),
+                    "fid_image_size": int(args.fid_image_size),
                     "seed": int(args.seed),
                     "config": ckpt_args,
                 },

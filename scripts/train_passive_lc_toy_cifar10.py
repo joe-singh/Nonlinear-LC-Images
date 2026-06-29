@@ -11,6 +11,7 @@ from typing import Any
 
 import torch
 from torch import Tensor, nn
+from torch.nn import functional as F
 from torch.utils.data import DataLoader, Subset, TensorDataset
 from torchvision import datasets, transforms
 from torchvision.utils import save_image
@@ -23,7 +24,7 @@ if str(ROOT) not in sys.path:
 from un0.losses import conditional_drift_loss_for_views  # noqa: E402
 from un0.passive_lc import PassiveLCGenerator  # noqa: E402
 
-IMAGE_SIZE = 32
+CIFAR_IMAGE_SIZE = 32
 NUM_CLASSES = 10
 GRAD_CLIP_NORM = 1.0
 LC_PARAMETER_NAMES = ("C", "L", "Cj0", "Vbias")
@@ -41,6 +42,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-steps", type=int, default=8)
     parser.add_argument("--method", choices=("euler", "rk4"), default="rk4")
     parser.add_argument("--integration-time", type=float, default=1.0)
+    parser.add_argument(
+        "--image-size",
+        type=int,
+        default=CIFAR_IMAGE_SIZE,
+        help=(
+            "Train against CIFAR resized to this square resolution. "
+            "Use 8 with --decoder-type state and --n-oscillators 96 for a "
+            "lightweight decoderless probe."
+        ),
+    )
+    parser.add_argument(
+        "--varactor-m",
+        type=float,
+        default=0.5,
+        help="Fixed varactor grading exponent in Cj(V)=Cj0/(1+V/Vj)^m.",
+    )
     parser.add_argument(
         "--decoder-type",
         choices=("conv", "linear", "state"),
@@ -121,26 +138,33 @@ def autocast_context(device: torch.device, precision: str):
 
 def build_loader(args: argparse.Namespace, device: torch.device) -> DataLoader:
     subset_size = int(args.subset_size)
+    image_size = int(args.image_size)
+    if image_size < 1:
+        raise ValueError(f"image_size must be positive, got {image_size}.")
     if args.synthetic_data:
         num_samples = subset_size if subset_size > 0 else 1024
         generator = torch.Generator(device="cpu").manual_seed(int(args.seed))
         images = torch.rand(
             num_samples,
             3,
-            IMAGE_SIZE,
-            IMAGE_SIZE,
+            image_size,
+            image_size,
             generator=generator,
         )
         images = images * 2.0 - 1.0
         labels = torch.arange(num_samples, dtype=torch.long) % NUM_CLASSES
         dataset = TensorDataset(images, labels)
     else:
-        transform = transforms.Compose(
+        transform_steps = []
+        if image_size != CIFAR_IMAGE_SIZE:
+            transform_steps.append(transforms.Resize((image_size, image_size)))
+        transform_steps.extend(
             [
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ]
         )
+        transform = transforms.Compose(transform_steps)
         dataset = datasets.CIFAR10(
             root=str(args.data_dir),
             train=True,
@@ -176,6 +200,9 @@ def save_samples(
 ) -> None:
     labels = class_balanced_labels(samples_per_class=8, device=device)
     images = model.sample_images(labels)
+    display_size = max(CIFAR_IMAGE_SIZE, int(model.image_size))
+    if int(model.image_size) != display_size:
+        images = F.interpolate(images, size=(display_size, display_size), mode="nearest")
     save_image(images.cpu(), out_dir / f"samples_epoch_{epoch:03d}.png", nrow=8)
 
 
@@ -188,10 +215,12 @@ def build_model(args: argparse.Namespace, device: torch.device) -> PassiveLCGene
         num_steps=int(args.num_steps),
         integration_time=float(args.integration_time),
         method=args.method,
+        image_size=int(args.image_size),
         num_classes=NUM_CLASSES,
         label_only=bool(args.label_only),
         decoder_width=int(args.decoder_width),
         decoder_type=args.decoder_type,
+        varactor_m=float(args.varactor_m),
     ).to(device)
     if args.freeze_dynamics or args.label_only:
         for parameter in model.dynamics.parameters():
@@ -391,7 +420,8 @@ def train(args: argparse.Namespace) -> None:
     write_diagnostics(out_dir, diagnostics)
     print(
         f"device={device} precision={args.precision} mode={mode} "
-        f"decoder_type={args.decoder_type} decoder_width={args.decoder_width} "
+        f"image_size={int(args.image_size)} decoder_type={args.decoder_type} "
+        f"decoder_width={args.decoder_width} varactor_m={float(args.varactor_m):.3g} "
         f"lr={float(args.lr):.2e} dynamics_lr={optimizer_lrs['dynamics']:.2e} "
         f"batches_per_epoch={len(loader)}"
     )

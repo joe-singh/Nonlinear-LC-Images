@@ -159,6 +159,27 @@ def test_passive_lc_generator_accepts_state_decoder() -> None:
     assert torch.isfinite(samples).all()
 
 
+def test_passive_lc_generator_accepts_lowres_state_decoder() -> None:
+    torch.manual_seed(25)
+    model = PassiveLCGenerator(
+        n_oscillators=96,
+        num_steps=0,
+        decoder_type="state",
+        image_size=8,
+        image_channels=3,
+        varactor_m=0.33,
+    )
+    labels = torch.tensor([0, 1, 2, 3])
+
+    samples = model(labels)
+
+    assert model.decoder_type == "state"
+    assert model.dynamics.m == pytest.approx(0.33)
+    assert model.dynamics.state_dim == 3 * 8 * 8
+    assert samples.shape == (4, 3 * 8 * 8)
+    assert torch.isfinite(samples).all()
+
+
 def test_state_decoder_requires_matching_state_and_image_dims() -> None:
     with pytest.raises(ValueError, match="requires the LC state dimension"):
         PassiveLCGenerator(
@@ -216,6 +237,8 @@ def test_fid_eval_rebuilds_model_from_training_args() -> None:
         "label_only": True,
         "decoder_width": 8,
         "decoder_type": "linear",
+        "image_size": 8,
+        "varactor_m": 0.75,
     }
 
     model = module.build_model_from_checkpoint_args(
@@ -230,13 +253,15 @@ def test_fid_eval_rebuilds_model_from_training_args() -> None:
     assert model.method == "euler"
     assert model.label_only
     assert model.decoder_type == "linear"
-    assert model.readout.out_features == 3 * 32 * 32
+    assert model.image_size == 8
+    assert model.dynamics.m == pytest.approx(0.75)
+    assert model.readout.out_features == 3 * 8 * 8
 
 
 def test_fid_eval_rebuilds_state_decoder_from_training_args() -> None:
     module = _load_toy_fid_script()
     ckpt_args = {
-        "n_oscillators": 1536,
+        "n_oscillators": 96,
         "topology": "ring",
         "k": 4,
         "seed": 11,
@@ -246,6 +271,7 @@ def test_fid_eval_rebuilds_state_decoder_from_training_args() -> None:
         "label_only": False,
         "decoder_width": 32,
         "decoder_type": "state",
+        "image_size": 8,
     }
 
     model = module.build_model_from_checkpoint_args(
@@ -254,8 +280,30 @@ def test_fid_eval_rebuilds_state_decoder_from_training_args() -> None:
     )
 
     assert model.decoder_type == "state"
-    assert model.dynamics.n == 1536
-    assert model.dynamics.state_dim == 3 * 32 * 32
+    assert model.dynamics.n == 96
+    assert model.image_size == 8
+    assert model.dynamics.state_dim == 3 * 8 * 8
+
+
+def test_training_loader_can_make_lowres_synthetic_data() -> None:
+    module = _load_toy_train_script()
+    args = module.build_parser().parse_args(
+        [
+            "--synthetic-data",
+            "--image-size",
+            "8",
+            "--subset-size",
+            "5",
+            "--batch-size",
+            "5",
+        ]
+    )
+
+    loader = module.build_loader(args, torch.device("cpu"))
+    images, labels = next(iter(loader))
+
+    assert images.shape == (5, 3, 8, 8)
+    assert labels.shape == (5,)
 
 
 def test_training_diagnostics_track_lc_delta_and_grad_norms() -> None:

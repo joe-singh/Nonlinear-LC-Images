@@ -28,6 +28,7 @@ import tempfile
 import torch
 from torch import Tensor, nn
 import torch.distributed as dist
+from torch.nn import functional as F
 from torchvision.utils import save_image
 
 CIFAR_IMAGE_SIZE = 32
@@ -74,6 +75,7 @@ def _dump_samples(
     device: torch.device,
     image_dir: Path,
     image_size: int,
+    save_image_size: int | None = None,
     prefix: str = "gen_",
 ) -> None:
     """Generate one sample per id in ``class_ids`` and save each as a PNG.
@@ -89,6 +91,13 @@ def _dump_samples(
             gen_flat = model.sample(batch_ids)
             nchw = gen_flat.reshape(-1, 3, image_size, image_size)
             normalized = ((nchw + 1.0) * 0.5).clamp(0.0, 1.0)
+            if save_image_size is not None and save_image_size != image_size:
+                normalized = F.interpolate(
+                    normalized,
+                    size=(save_image_size, save_image_size),
+                    mode="bilinear",
+                    align_corners=False,
+                )
             for img in normalized:
                 save_image(img, image_dir / f"{prefix}{idx:06d}.png")
                 idx += 1
@@ -147,6 +156,7 @@ def compute_fid(
     batch_size: int,
     device: torch.device,
     image_size: int = CIFAR_IMAGE_SIZE,
+    fid_image_size: int | None = None,
     real_image_dir: str | Path | None = None,
     num_real_samples: int | None = None,
     gen_class_ids: Tensor | None = None,
@@ -158,9 +168,11 @@ def compute_fid(
 
     Reference statistics:
       - ``real_image_dir`` is None (CIFAR): score against the named ``cifar10``
-        train statistics at ``image_size`` (downloaded/cached by clean-fid).
+        train statistics at ``fid_image_size or image_size``.
       - ``real_image_dir`` is set (ImageNet): build custom statistics from that
         directory once (``num_real_samples`` images), then score against them.
+      - ``fid_image_size`` lets low-resolution models be upsampled only for
+        scoring, while still reshaping model outputs at ``image_size``.
 
     Generation labels:
       - ``gen_class_ids`` is None: ``num_samples`` class-balanced ids.
@@ -178,6 +190,7 @@ def compute_fid(
     if distributed and image_dir is None:
         raise ValueError("image_dir (shared) is required when world_size > 1.")
 
+    score_image_size = image_size if fid_image_size is None else fid_image_size
     all_ids = (
         _class_balanced_ids(num_samples, num_classes, device)
         if gen_class_ids is None
@@ -194,6 +207,7 @@ def compute_fid(
                 device=device,
                 image_dir=path,
                 image_size=image_size,
+                save_image_size=score_image_size,
                 prefix=f"gen_r{rank}_" if distributed else "gen_",
             )
         if distributed:
@@ -204,7 +218,7 @@ def compute_fid(
             path,
             real_image_dir=real_image_dir,
             num_real_samples=num_real_samples,
-            image_size=image_size,
+            image_size=score_image_size,
         )
 
     if distributed:

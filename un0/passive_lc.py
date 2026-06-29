@@ -351,6 +351,7 @@ class PassiveLCGenerator(nn.Module):
         label_only: bool = False,
         decoder_width: int = 32,
         decoder_type: DecoderType = "conv",
+        varactor_m: float = 0.5,
     ) -> None:
         super().__init__()
         if decoder_type not in ("conv", "linear", "state"):
@@ -375,18 +376,26 @@ class PassiveLCGenerator(nn.Module):
         self.decoder_width = int(decoder_width)
         self.decoder_type = decoder_type
         self.output_dim = self.image_channels * self.image_size * self.image_size
+        self.varactor_m = float(varactor_m)
 
         self.dynamics = PassiveLCDynamics(
             n=int(n_oscillators),
             topology=topology,
             k=int(k),
             seed=int(seed),
+            m=self.varactor_m,
         )
         if self.decoder_type == "state" and self.dynamics.state_dim != self.output_dim:
+            required_n = self.output_dim // 2 if self.output_dim % 2 == 0 else None
+            hint = (
+                f" Use n_oscillators={required_n} for image_size={self.image_size}."
+                if required_n is not None
+                else ""
+            )
             raise ValueError(
                 "decoder_type='state' requires the LC state dimension to equal the "
                 f"flat image dimension; got state_dim={self.dynamics.state_dim} and "
-                f"output_dim={self.output_dim}. For CIFAR-10 use n_oscillators=1536."
+                f"output_dim={self.output_dim}.{hint}"
             )
         self.class_offset = nn.Embedding(self.num_classes, self.dynamics.state_dim)
         nn.init.normal_(self.class_offset.weight, mean=0.0, std=0.02)
