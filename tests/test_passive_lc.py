@@ -79,6 +79,18 @@ def test_passive_lc_dynamics_forward_shape_and_finite() -> None:
     assert torch.isfinite(derivative).all()
 
 
+def test_passive_lc_dynamics_allows_linear_varactor_control() -> None:
+    torch.manual_seed(0)
+    dynamics = PassiveLCDynamics(n=8, topology="ring", m=0.0)
+    state = 0.1 * torch.randn(4, dynamics.state_dim)
+
+    derivative = dynamics(state)
+
+    assert dynamics.m == 0.0
+    assert derivative.shape == (4, dynamics.state_dim)
+    assert torch.isfinite(derivative).all()
+
+
 def test_fixed_step_rollout_stays_finite() -> None:
     torch.manual_seed(1)
     dynamics = PassiveLCDynamics(n=8, topology="random_sparse", k=3, seed=7)
@@ -239,6 +251,12 @@ def test_fid_eval_rebuilds_model_from_training_args() -> None:
         "decoder_type": "linear",
         "image_size": 8,
         "varactor_m": 0.75,
+        "init_cg": 0.2,
+        "cg_scale": 0.8,
+        "init_vbias": 0.5,
+        "vbias_min": 1.0,
+        "v_clip_scale": 1.0,
+        "initial_state_scale": 0.4,
     }
 
     model = module.build_model_from_checkpoint_args(
@@ -255,6 +273,10 @@ def test_fid_eval_rebuilds_model_from_training_args() -> None:
     assert model.decoder_type == "linear"
     assert model.image_size == 8
     assert model.dynamics.m == pytest.approx(0.75)
+    assert model.dynamics.cg_scale == pytest.approx(0.8)
+    assert model.dynamics.vbias_min == pytest.approx(1.0)
+    assert model.dynamics.v_clip_scale == pytest.approx(1.0)
+    assert model.initial_state_scale == pytest.approx(0.4)
     assert model.readout.out_features == 3 * 8 * 8
 
 

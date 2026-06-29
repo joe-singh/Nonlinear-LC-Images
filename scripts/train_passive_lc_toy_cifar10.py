@@ -56,8 +56,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--varactor-m",
         type=float,
         default=0.5,
-        help="Fixed varactor grading exponent in Cj(V)=Cj0/(1+V/Vj)^m.",
+        help=(
+            "Fixed varactor grading exponent in Cj(V)=Cj0/(1+V/Vj)^m. "
+            "Use 0 for a linear constant-coupling LC control."
+        ),
     )
+    parser.add_argument("--init-cg", type=float, default=0.05)
+    parser.add_argument("--cg-scale", type=float, default=0.12)
+    parser.add_argument("--init-vbias", type=float, default=0.1)
+    parser.add_argument("--vbias-min", type=float, default=2.05)
+    parser.add_argument("--v-clip-scale", type=float, default=2.0)
+    parser.add_argument("--initial-state-scale", type=float, default=0.1)
     parser.add_argument(
         "--decoder-type",
         choices=("conv", "linear", "state"),
@@ -221,6 +230,12 @@ def build_model(args: argparse.Namespace, device: torch.device) -> PassiveLCGene
         decoder_width=int(args.decoder_width),
         decoder_type=args.decoder_type,
         varactor_m=float(args.varactor_m),
+        init_cg=float(args.init_cg),
+        cg_scale=float(args.cg_scale),
+        init_vbias=float(args.init_vbias),
+        vbias_min=float(args.vbias_min),
+        v_clip_scale=float(args.v_clip_scale),
+        initial_state_scale=float(args.initial_state_scale),
     ).to(device)
     if args.freeze_dynamics or args.label_only:
         for parameter in model.dynamics.parameters():
@@ -422,6 +437,8 @@ def train(args: argparse.Namespace) -> None:
         f"device={device} precision={args.precision} mode={mode} "
         f"image_size={int(args.image_size)} decoder_type={args.decoder_type} "
         f"decoder_width={args.decoder_width} varactor_m={float(args.varactor_m):.3g} "
+        f"init_cg={float(args.init_cg):.3g} vbias_min={float(args.vbias_min):.3g} "
+        f"initial_state_scale={float(args.initial_state_scale):.3g} "
         f"lr={float(args.lr):.2e} dynamics_lr={optimizer_lrs['dynamics']:.2e} "
         f"batches_per_epoch={len(loader)}"
     )

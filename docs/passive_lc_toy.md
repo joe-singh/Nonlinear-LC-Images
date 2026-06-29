@@ -59,7 +59,8 @@ This requires `2 * n_oscillators == 3 * image_size * image_size`; for
 `--image-size 8`, use `--n-oscillators 96`.
 
 The varactor exponent `m` is a fixed hyperparameter, exposed as `--varactor-m`.
-It is not learned by default.
+It is not learned by default. `--varactor-m 0` is a linear constant-coupling
+control: `Cg = Cj0`.
 
 ## Training
 
@@ -105,6 +106,56 @@ python scripts/train_passive_lc_toy_cifar10.py \
 Sweep `--varactor-m 0.33`, `0.5`, and `1.0` with the same seed and output
 settings to test whether the nonlinear capacitance law changes the low-res
 decoderless image distribution.
+
+If those are indistinguishable, use an intentionally exaggerated comparison:
+
+```bash
+# Linear coupled-LC control
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type state \
+    --image-size 8 \
+    --n-oscillators 96 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --varactor-m 0 \
+    --init-cg 0.2 \
+    --cg-scale 0.8 \
+    --init-vbias 0.5 \
+    --vbias-min 1.0 \
+    --v-clip-scale 1.0 \
+    --initial-state-scale 0.4 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/state_lowres8_linear_m0_boosted
+
+# Strong nonlinear varactor run
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type state \
+    --image-size 8 \
+    --n-oscillators 96 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --varactor-m 4 \
+    --init-cg 0.2 \
+    --cg-scale 0.8 \
+    --init-vbias 0.5 \
+    --vbias-min 1.0 \
+    --v-clip-scale 1.0 \
+    --initial-state-scale 0.4 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/state_lowres8_nonlinear_m4_boosted
+```
 
 For a no-download CPU smoke test:
 

@@ -209,6 +209,62 @@ Sweep the fixed varactor grading exponent with otherwise identical settings:
     --out-dir runs/state_lowres8_ring_m0p33
 ```
 
+For a deliberately exaggerated test, compare a linear constant-coupling control
+against a stronger nonlinear varactor setting. `--varactor-m 0` removes the
+voltage dependence of the coupling capacitance, while the second run increases
+coupling strength, lowers the bias, clips edge voltage more tightly, and uses
+larger initial states so the nonlinear capacitance has a chance to matter.
+
+```python
+# Linear coupled-LC control: Cg is constant because m=0.
+!python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type state \
+    --image-size 8 \
+    --n-oscillators 96 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --varactor-m 0 \
+    --init-cg 0.2 \
+    --cg-scale 0.8 \
+    --init-vbias 0.5 \
+    --vbias-min 1.0 \
+    --v-clip-scale 1.0 \
+    --initial-state-scale 0.4 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/state_lowres8_linear_m0_boosted
+```
+
+```python
+# Strong nonlinear varactor run.
+!python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type state \
+    --image-size 8 \
+    --n-oscillators 96 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --varactor-m 4 \
+    --init-cg 0.2 \
+    --cg-scale 0.8 \
+    --init-vbias 0.5 \
+    --vbias-min 1.0 \
+    --v-clip-scale 1.0 \
+    --initial-state-scale 0.4 \
+    --epochs 25 \
+    --batch-size 256 \
+    --subset-size 10000 \
+    --out-dir runs/state_lowres8_nonlinear_m4_boosted
+```
+
 The full `32x32` decoderless run is much heavier:
 
 ```python

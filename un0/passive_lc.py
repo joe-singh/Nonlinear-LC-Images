@@ -104,8 +104,8 @@ class PassiveLCDynamics(nn.Module):
             raise ValueError(f"n must be at least 2, got {n}.")
         if vj <= 0.0:
             raise ValueError(f"vj must be positive, got {vj}.")
-        if m <= 0.0:
-            raise ValueError(f"m must be positive, got {m}.")
+        if m < 0.0:
+            raise ValueError(f"m must be non-negative, got {m}.")
         if v_clip_scale <= 0.0:
             raise ValueError(f"v_clip_scale must be positive, got {v_clip_scale}.")
         if jitter <= 0.0:
@@ -352,6 +352,11 @@ class PassiveLCGenerator(nn.Module):
         decoder_width: int = 32,
         decoder_type: DecoderType = "conv",
         varactor_m: float = 0.5,
+        init_cg: float = 0.05,
+        cg_scale: float = 0.12,
+        init_vbias: float = 0.1,
+        vbias_min: float = 2.05,
+        v_clip_scale: float = 2.0,
     ) -> None:
         super().__init__()
         if decoder_type not in ("conv", "linear", "state"):
@@ -384,6 +389,11 @@ class PassiveLCGenerator(nn.Module):
             k=int(k),
             seed=int(seed),
             m=self.varactor_m,
+            init_cg=float(init_cg),
+            cg_scale=float(cg_scale),
+            init_vbias=float(init_vbias),
+            vbias_min=float(vbias_min),
+            v_clip_scale=float(v_clip_scale),
         )
         if self.decoder_type == "state" and self.dynamics.state_dim != self.output_dim:
             required_n = self.output_dim // 2 if self.output_dim % 2 == 0 else None

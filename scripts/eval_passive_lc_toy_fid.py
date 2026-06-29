@@ -97,6 +97,12 @@ def build_model_from_checkpoint_args(
         decoder_width=int(ckpt_args.get("decoder_width", 32)),
         decoder_type=str(ckpt_args.get("decoder_type", "conv")),
         varactor_m=float(ckpt_args.get("varactor_m", 0.5)),
+        init_cg=float(ckpt_args.get("init_cg", 0.05)),
+        cg_scale=float(ckpt_args.get("cg_scale", 0.12)),
+        init_vbias=float(ckpt_args.get("init_vbias", 0.1)),
+        vbias_min=float(ckpt_args.get("vbias_min", 2.05)),
+        v_clip_scale=float(ckpt_args.get("v_clip_scale", 2.0)),
+        initial_state_scale=float(ckpt_args.get("initial_state_scale", 0.1)),
     )
     return model.to(device)
 
