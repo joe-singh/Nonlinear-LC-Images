@@ -160,6 +160,28 @@ Use `--decoder-type linear` to replace the resize-conv stack with a direct
     --out-dir runs/linear_learned_lc_n64
 ```
 
+## Decoderless State Output
+
+Use `--decoder-type state` to remove the learned readout and decoder. For
+CIFAR-10 this requires `--n-oscillators 1536`, because the LC state has
+dimension `2 * n_oscillators` and the flat image has dimension `3 * 32 * 32`.
+
+```python
+!python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type state \
+    --n-oscillators 1536 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --epochs 25 \
+    --batch-size 128 \
+    --subset-size 10000 \
+    --out-dir runs/state_decoderless_ring_n1536
+```
+
 ## FID Scoring
 
 Install clean-FID only when you want to score checkpoints:

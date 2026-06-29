@@ -12,7 +12,7 @@ from torch.nn import functional as F
 
 Topology = Literal["ring", "chain", "random_sparse", "all_to_all"]
 IntegrationMethod = Literal["euler", "rk4"]
-DecoderType = Literal["conv", "linear"]
+DecoderType = Literal["conv", "linear", "state"]
 
 
 def _inv_softplus(value: float) -> float:
@@ -354,8 +354,10 @@ class PassiveLCGenerator(nn.Module):
         decoder_type: DecoderType = "conv",
     ) -> None:
         super().__init__()
-        if decoder_type not in ("conv", "linear"):
-            raise ValueError(f"decoder_type must be 'conv' or 'linear', got {decoder_type!r}.")
+        if decoder_type not in ("conv", "linear", "state"):
+            raise ValueError(
+                f"decoder_type must be 'conv', 'linear', or 'state', got {decoder_type!r}."
+            )
         if decoder_type == "conv" and decoder_feature_dim != 128:
             raise ValueError("decoder_feature_dim must be 128 for the 8x4x4 toy decoder.")
         if num_classes < 1:
@@ -383,11 +385,17 @@ class PassiveLCGenerator(nn.Module):
             k=int(k),
             seed=int(seed),
         )
+        if self.decoder_type == "state" and self.dynamics.state_dim != self.output_dim:
+            raise ValueError(
+                "decoder_type='state' requires the LC state dimension to equal the "
+                f"flat image dimension; got state_dim={self.dynamics.state_dim} and "
+                f"output_dim={self.output_dim}. For CIFAR-10 use n_oscillators=1536."
+            )
         self.class_offset = nn.Embedding(self.num_classes, self.dynamics.state_dim)
         nn.init.normal_(self.class_offset.weight, mean=0.0, std=0.02)
 
-        self.readout_norm = nn.LayerNorm(self.dynamics.state_dim)
         if self.decoder_type == "conv":
+            self.readout_norm = nn.LayerNorm(self.dynamics.state_dim)
             self.readout = nn.Linear(self.dynamics.state_dim, decoder_feature_dim)
             self.decoder = _TinyResizeConvDecoder(
                 feature_dim=decoder_feature_dim,
@@ -397,9 +405,14 @@ class PassiveLCGenerator(nn.Module):
                 stem_size=4,
                 hidden_channels=self.decoder_width,
             )
-        else:
+        elif self.decoder_type == "linear":
+            self.readout_norm = nn.LayerNorm(self.dynamics.state_dim)
             self.readout = nn.Linear(self.dynamics.state_dim, self.output_dim)
             self.decoder = _LinearPixelDecoder(self.output_dim)
+        else:
+            self.readout_norm = nn.Identity()
+            self.readout = nn.Identity()
+            self.decoder = nn.Tanh()
 
     def _sample_initial_state(
         self,
@@ -451,12 +464,15 @@ class PassiveLCGenerator(nn.Module):
                 integration_time=self.integration_time,
                 method=self.method,
             )
-        normalized_state = self.readout_norm(final_state)
         if self.decoder_type == "conv":
+            normalized_state = self.readout_norm(final_state)
             features = torch.tanh(self.readout(normalized_state))
             return self.decoder(features)
-        pixels = self.readout(normalized_state)
-        return self.decoder(pixels)
+        if self.decoder_type == "linear":
+            normalized_state = self.readout_norm(final_state)
+            pixels = self.readout(normalized_state)
+            return self.decoder(pixels)
+        return self.decoder(final_state)
 
     @torch.no_grad()
     def sample(

@@ -196,6 +196,45 @@ python scripts/train_passive_lc_toy_cifar10.py \
     --out-dir runs/linear_learned_lc_n64
 ```
 
+## Decoderless State Output
+
+Use `--decoder-type state` to remove the learned readout and decoder entirely.
+The output path becomes:
+
+```text
+LC state -> tanh -> image
+```
+
+For CIFAR-10, the flat image dimension is `3 * 32 * 32 = 3072`. The LC state is
+`concat(phi, V)`, so `state_dim = 2 * n_oscillators`. Therefore the decoderless
+state mode requires:
+
+```text
+n_oscillators = 1536
+```
+
+First decoderless run:
+
+```bash
+python scripts/train_passive_lc_toy_cifar10.py \
+    --device cuda \
+    --precision bf16 \
+    --seed 42 \
+    --decoder-type state \
+    --n-oscillators 1536 \
+    --topology ring \
+    --num-steps 8 \
+    --method rk4 \
+    --epochs 25 \
+    --batch-size 128 \
+    --subset-size 10000 \
+    --out-dir runs/state_decoderless_ring_n1536
+```
+
+The state mode has no trainable readout or decoder parameters. Diagnostics
+should show nonzero gradients only for `dynamics` and `class_offset`; `readout`
+and `decoder` should stay at zero.
+
 ## FID Scoring
 
 The toy path does not compute FID during training, but checkpoints can be scored

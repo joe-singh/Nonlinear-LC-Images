@@ -132,6 +132,9 @@ Sample grids are saved as `samples_epoch_*.png`; checkpoints are saved as
 `diagnostics.json`, including epoch losses, gradient norms for dynamics/readout/
 decoder groups, and physical LC parameter movement from initialization.
 
+There is also a ready-to-run decoderless Colab notebook at
+`notebooks/passive_lc_state_decoderless_colab.ipynb`.
+
 ## First Comparisons
 
 Useful first checks:
@@ -142,6 +145,8 @@ Useful first checks:
 - `--decoder-width 8` or `16` to make dynamics differences less hidden by the decoder.
 - `--decoder-type linear` to replace the resize-conv stack with a direct
   `LayerNorm -> Linear -> tanh` pixel decoder.
+- `--decoder-type state --n-oscillators 1536` to remove the learned readout and
+  decoder entirely, using `tanh(final_state)` as the flattened CIFAR image.
 - `--topology ring` versus `--topology random_sparse --k 4`.
 - `--n-oscillators 32`, `64`, and `128`.
 - `--num-steps 4` versus `8`.

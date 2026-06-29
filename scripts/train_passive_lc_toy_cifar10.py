@@ -43,9 +43,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--integration-time", type=float, default=1.0)
     parser.add_argument(
         "--decoder-type",
-        choices=("conv", "linear"),
+        choices=("conv", "linear", "state"),
         default="conv",
-        help="Use the resize-conv image decoder or a direct linear pixel decoder.",
+        help=(
+            "Use the resize-conv decoder, a direct linear pixel decoder, or "
+            "the raw LC state as pixels."
+        ),
     )
     parser.add_argument(
         "--decoder-width",

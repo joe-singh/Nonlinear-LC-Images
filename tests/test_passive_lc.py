@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
 import torch
 
 from un0.passive_lc import (
@@ -139,6 +140,34 @@ def test_passive_lc_generator_accepts_linear_decoder() -> None:
     assert torch.isfinite(samples).all()
 
 
+def test_passive_lc_generator_accepts_state_decoder() -> None:
+    torch.manual_seed(24)
+    model = PassiveLCGenerator(
+        n_oscillators=6,
+        num_steps=0,
+        decoder_type="state",
+        image_size=2,
+        image_channels=3,
+    )
+    labels = torch.tensor([0, 1, 2, 3])
+
+    samples = model(labels)
+
+    assert model.decoder_type == "state"
+    assert model.dynamics.state_dim == 3 * 2 * 2
+    assert samples.shape == (4, 3 * 2 * 2)
+    assert torch.isfinite(samples).all()
+
+
+def test_state_decoder_requires_matching_state_and_image_dims() -> None:
+    with pytest.raises(ValueError, match="requires the LC state dimension"):
+        PassiveLCGenerator(
+            n_oscillators=8,
+            num_steps=0,
+            decoder_type="state",
+        )
+
+
 def test_passive_lc_generator_backward_has_finite_gradients() -> None:
     torch.manual_seed(3)
     model = PassiveLCGenerator(n_oscillators=8, num_steps=2, integration_time=0.5)
@@ -202,6 +231,31 @@ def test_fid_eval_rebuilds_model_from_training_args() -> None:
     assert model.label_only
     assert model.decoder_type == "linear"
     assert model.readout.out_features == 3 * 32 * 32
+
+
+def test_fid_eval_rebuilds_state_decoder_from_training_args() -> None:
+    module = _load_toy_fid_script()
+    ckpt_args = {
+        "n_oscillators": 1536,
+        "topology": "ring",
+        "k": 4,
+        "seed": 11,
+        "num_steps": 0,
+        "integration_time": 1.0,
+        "method": "rk4",
+        "label_only": False,
+        "decoder_width": 32,
+        "decoder_type": "state",
+    }
+
+    model = module.build_model_from_checkpoint_args(
+        ckpt_args,
+        device=torch.device("cpu"),
+    )
+
+    assert model.decoder_type == "state"
+    assert model.dynamics.n == 1536
+    assert model.dynamics.state_dim == 3 * 32 * 32
 
 
 def test_training_diagnostics_track_lc_delta_and_grad_norms() -> None:
